@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>F.O.G.O. – Central de Operações</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+/* Paleta única. Os pares texto/fundo abaixo são verificados por tests/test_acessibilidade.py (WCAG AA). */
+:root{
+  --aside-bg:#0f172a;--aside-card:#1e293b;--aside-fg:#e2e8f0;--aside-muted:#a8b3c7;--aside-link:#93c5fd;
+  --tabs-bg:#0b1220;--tabs-fg:#cbd5e1;--foco-escuro:#fde047;
+  --painel-bg:#f1f5f9;--card-bg:#ffffff;--stat-bg:#f8fafc;--fg:#0f172a;--muted:#475569;--borda:#64748b;
+  --link:#1d4ed8;--foco-claro:#1d4ed8;
+  --acento-bg:#c2410c;--acento-fg:#ffffff;--branco:#ffffff;
+  --n-critico:#b91c1c;--n-alto:#c2410c;--n-medio:#a16207;--n-baixo:#15803d;
+  --tendencia-alta:#b91c1c;--tendencia-queda:#15803d;
+  --campo-bg:#ffffff;--campo-fg:#0f172a;--campo-placeholder:#475569;
+  --rec-bg:#fff7ed;--aviso-bg:#fffbeb;--aviso-fg:#92400e;--ok-bg:#dcfce7;--ok-fg:#14532d;--erro-bg:#fef2f2;--erro-fg:#991b1b;
+  --calor:#f97316;
+  /* Cursor do mapa: cruz com contorno branco + traço escuro, visível sobre mapa claro ou escuro */
+  --cursor-mapa:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cg stroke='white' stroke-width='5' stroke-linecap='round'%3E%3Cpath d='M16 3v9M16 20v9M3 16h9M20 16h9'/%3E%3C/g%3E%3Cg stroke='%230f172a' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M16 3v9M16 20v9M3 16h9M20 16h9'/%3E%3C/g%3E%3Ccircle cx='16' cy='16' r='2' fill='%230f172a' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E") 16 16, crosshair;
+}
+*{box-sizing:border-box}
+body{margin:0;font:0.9375rem/1.45 Arial,sans-serif;display:grid;grid-template-columns:22rem 1fr;height:100vh;height:100dvh;color:var(--fg);background:var(--painel-bg)}
+.so-leitor{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.pular{position:absolute;left:8px;top:-60px;z-index:2000;background:var(--card-bg);color:var(--fg);padding:10px 14px;border-radius:8px;font-weight:bold}
+.pular:focus{top:8px}
+:focus-visible{outline:3px solid var(--foco-claro);outline-offset:2px}
+aside :focus-visible,.tabs :focus-visible{outline-color:var(--foco-escuro)}
+aside{padding:14px;overflow:auto;background:var(--aside-bg);color:var(--aside-fg)}
+aside a{color:var(--aside-link)}
+h1{font-size:1.15rem;margin:0 0 10px}
+aside h2{font-size:0.8125rem;margin:16px 0 6px;color:var(--aside-muted);text-transform:uppercase;letter-spacing:.03em}
+select,input[type=text],input[type=number],input[type=date]{width:100%;margin:3px 0;padding:8px;min-height:36px;border-radius:6px;border:1px solid var(--borda);background:var(--campo-bg);color:var(--campo-fg);font:inherit}
+input::placeholder{color:var(--campo-placeholder);opacity:1}
+label{display:block;font-size:0.875rem;margin:4px 0}
+.rotulo{color:var(--aside-muted);font-size:0.8125rem;margin-top:8px}
+input[type=checkbox]{width:24px;height:24px;vertical-align:-7px;margin-right:8px}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:6px}.kpi{background:var(--aside-card);border-radius:8px;padding:8px}.kpi b{display:block;font-size:1.3rem}
+.alerta,.item{display:block;width:100%;text-align:left;font:inherit;font-size:0.8125rem;color:var(--aside-fg);background:var(--aside-card);border:0;border-radius:6px;padding:7px 9px;margin:5px 0;cursor:pointer;min-height:36px}
+.alerta{border-left:4px solid #f59e0b}.alerta.crit{border-left-color:#f87171}
+.alerta:hover,.item:hover{background:#334155}
+.btn-aside{display:block;width:100%;text-align:left;font:inherit;font-size:0.8125rem;color:var(--aside-fg);background:var(--aside-card);border:1px solid var(--aside-muted);border-radius:6px;padding:8px 10px;margin:5px 0;cursor:pointer;min-height:38px}
+.btn-aside:hover{background:#334155}
+.cont{font-size:0.8125rem;color:var(--aside-muted);margin:2px 0 4px}
+.leg{margin:0;padding:0;list-style:none}.leg li{display:inline-block;margin:2px 10px 2px 0;font-size:0.8125rem}
+.leg i{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:5px;vertical-align:-1px;border:2px solid #fff}
+.leg i.trac{background:#fff;border:3px dashed #e2e8f0}
+.leg i.anel-m{background:none;border:3px dashed #fb923c}.leg i.anel-s{background:none;border:3px dotted #f87171}
+.leg.tipos li{display:block;margin:3px 0}.leg.tipos span{display:inline-block;width:1.7em;text-align:center}
+details.leg-det summary{cursor:pointer;font-size:0.8125rem;margin:6px 0;color:var(--aside-link)}
+main{display:flex;flex-direction:column;min-width:0;height:100vh;height:100dvh}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;padding:8px 10px;background:var(--tabs-bg)}
+.tabs button{border:0;padding:9px 14px;min-height:40px;border-radius:8px;background:var(--aside-card);color:var(--tabs-fg);cursor:pointer;font:inherit;font-size:0.875rem}
+.tabs button[aria-selected=true]{background:var(--acento-bg);color:var(--acento-fg);font-weight:bold}
+[hidden]{display:none!important}
+#painel-mapa{flex:1;display:flex;flex-direction:column;min-height:0}
+#mapa{flex:1;min-height:200px}
+.dica-ponto{background:var(--acento-bg);color:var(--acento-fg);padding:9px 14px;font-weight:bold}
+/* Cursor: contornos explícitos para o mapa e para a hierarquia do Leaflet (que define "grab"/"move") */
+.leaflet-container,.leaflet-container.leaflet-grab,.leaflet-dragging .leaflet-container,.leaflet-dragging .leaflet-grab{cursor:var(--cursor-mapa)!important}
+.leaflet-container .leaflet-interactive,.leaflet-container .leaflet-control a{cursor:pointer!important}
+/* Marcadores: ícone do TIPO dentro; cor do contorno = situação; contorno tracejado = fora de operação */
+.pino{width:30px;height:30px;border-radius:50%;background:#fff;border:4px solid var(--st,#64748b);display:flex;align-items:center;justify-content:center;font-size:0.875rem;line-height:1;box-shadow:0 0 0 1.5px #0f172a;transition:transform .12s}
+.pino.fora{border-style:dashed}
+.leaflet-marker-icon:hover .pino{transform:scale(1.25)}
+.ag{background:#2563eb;color:#fff;border-radius:50%;width:28px;height:28px;text-align:center;line-height:24px;border:2px solid #fff;box-shadow:0 0 0 1.5px #0f172a;font-size:0.8125rem;font-weight:bold}
+.leaflet-marker-icon:hover .ag{transform:scale(1.2)}
+#detalhe-eq{background:var(--card-bg);border-top:1px solid var(--borda)}
+#detalhe-eq summary{padding:10px 14px;cursor:pointer;font-weight:bold}
+#detalhe-eq .rolagem{max-height:36vh;overflow:auto;padding:0 14px 10px}
+#prev,#reg,#cad{flex:1;overflow:auto;padding:16px}
+main h2.tit{font-size:1.4rem;margin:0}#prev h3,#reg h3,#cad h3{margin:0 0 8px;font-size:1rem}
+.cab{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.cab p{margin:4px 0 0;color:var(--muted);font-size:0.875rem}
+.acoes button{border:0;border-radius:8px;padding:9px 14px;min-height:38px;margin:2px 0 2px 6px;cursor:pointer;background:var(--fg);color:var(--branco);font:inherit;font-size:0.8125rem}
+.acoes button.sec{background:#e2e8f0;color:var(--fg)}
+.btn{border:0;border-radius:8px;padding:10px 16px;min-height:40px;background:var(--acento-bg);color:var(--acento-fg);font:inherit;font-weight:bold;cursor:pointer;margin:6px 8px 0 0}
+.btn.sec{background:#e2e8f0;color:var(--fg);font-weight:normal}
+.card{background:var(--card-bg);border-radius:12px;padding:14px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.grid2>.card{margin-bottom:0}
+.grid2>*,.card{min-width:0}
+.sub{color:var(--muted);font-size:0.8125rem;margin:-4px 0 8px}
+.brief{border-left:5px solid var(--acento-bg)}.brief li{margin:6px 0}.brief ul{margin:0;padding-left:18px}
+.barra{display:grid;grid-template-columns:9rem 1fr 8rem;gap:8px;align-items:center;margin:6px 0;font-size:0.8125rem}
+.barra .t{height:12px;background:#e2e8f0;border-radius:6px;overflow:hidden}.barra .t i{display:block;height:100%}
+.mini{display:inline-block;width:56px;height:8px;background:#e2e8f0;border-radius:4px;vertical-align:middle;margin-right:6px;overflow:hidden}.mini i{display:block;height:100%;background:var(--borda)}
+.rolagem-x{overflow-x:auto;max-width:100%}
+.rolagem-x:focus-visible{outline-offset:-3px}
+table{border-collapse:collapse;width:100%;font-size:0.8125rem}
+th,td{padding:6px;text-align:center;border-bottom:1px solid #e2e8f0}th{color:var(--muted);font-weight:700}
+td.l,th.l{text-align:left}
+tr.clic:hover{background:var(--stat-bg)}
+button.link{border:0;background:none;color:var(--link);font:inherit;font-weight:bold;text-decoration:underline;cursor:pointer;padding:4px 2px;min-height:28px;text-align:left}
+.chip{display:inline-block;padding:2px 9px;border-radius:10px;color:var(--branco);font-size:0.8125rem;font-weight:bold}
+.chip.critico{background:var(--n-critico)}.chip.alto{background:var(--n-alto)}.chip.medio,.chip.atencao{background:var(--n-medio)}.chip.baixo,.chip.normal{background:var(--n-baixo)}
+.rec{border-left:4px solid var(--acento-bg);padding:7px 10px;margin:8px 0;background:var(--rec-bg);border-radius:6px;font-size:0.875rem}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(11.5rem,1fr));gap:10px}
+.stat{background:var(--stat-bg);border-radius:10px;padding:10px;border-left:5px solid var(--borda)}.stat b{display:block;font-size:1.4rem}.stat span{font-size:0.8125rem;color:var(--muted)}
+.stat.critico{border-left-color:var(--n-critico)}.stat.alto{border-left-color:var(--n-alto)}.stat.medio,.stat.atencao{border-left-color:var(--n-medio)}.stat.baixo,.stat.normal{border-left-color:var(--n-baixo)}
+.msg{background:var(--ok-bg);color:var(--ok-fg);border-radius:8px;padding:9px 12px;margin:10px 0;font-size:0.875rem}
+.erro-form{background:var(--erro-bg);color:var(--erro-fg);border:2px solid var(--erro-fg);border-radius:8px;padding:10px 14px;margin:10px 0;font-size:0.875rem}
+.erro-form ul{margin:4px 0 0;padding-left:20px}
+.aviso{font-size:0.8125rem;color:var(--aviso-fg);background:var(--aviso-bg);padding:9px;border-radius:6px}
+.alta{color:var(--tendencia-alta);font-weight:bold}.queda{color:var(--tendencia-queda);font-weight:bold}
+.met h3{margin-top:10px}.met p{margin:2px 0 8px;font-size:0.875rem;color:var(--fg)}
+#heat-sel{width:15rem;margin-bottom:8px}
+fieldset{border:1px solid var(--borda);border-radius:10px;margin:0 0 14px;padding:8px 14px 12px}
+legend{font-weight:bold;padding:0 6px}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:2px 14px}
+.obrig{color:var(--erro-fg);font-weight:bold}
+.dica{display:block;font-weight:normal;color:var(--muted);font-size:0.8125rem}
+@media(max-width:900px){body{grid-template-columns:1fr;grid-template-rows:auto 1fr;height:auto}main{height:90vh}.grid2{grid-template-columns:1fr}.barra{grid-template-columns:7rem 1fr 6rem}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style></head><body>
+<a class="pular" href="#conteudo">Pular para o conteúdo principal</a>
+<div id="anuncio" class="so-leitor" role="status" aria-live="polite"></div>
+
+<aside aria-label="Painel de controle">
+<h1>🔥 F.O.G.O. – Central de Operações</h1>
+<div class="kpis" id="kpis" aria-label="Indicadores gerais"></div>
+
+<h2>Buscar</h2>
+<label class="rotulo" for="busca">Equipamento (série, rua, bairro) ou agente</label>
+<input type="text" id="busca" placeholder="Ex.: Av. Brasil" autocomplete="off">
+
+<h2>Equipamentos</h2>
+<label><input type="checkbox" id="v-eq" checked>Mostrar no mapa</label>
+<label><input type="checkbox" id="cor-risco">Colorir pelo risco previsto</label>
+<label class="so-leitor" for="f-tipo">Tipo de equipamento</label>
+<select id="f-tipo"><option value="">Todos os tipos</option></select>
+<label class="so-leitor" for="f-sit">Situação do equipamento</label>
+<select id="f-sit"><option value="">Todas as situações</option></select>
+<label class="so-leitor" for="f-bairro">Bairro (região)</label>
+<select id="f-bairro"><option value="">Todos os bairros</option></select>
+<label class="so-leitor" for="f-orgao">Órgão responsável (vale para equipamentos e agentes)</label>
+<select id="f-orgao"><option value="">Todos os órgãos</option></select>
+
+<h2>Agentes</h2>
+<label><input type="checkbox" id="v-ag" checked>Mostrar no mapa</label>
+<label class="rotulo" for="busca-ag">Nome ou matrícula do agente (Enter localiza no mapa)</label>
+<input type="text" id="busca-ag" placeholder="Ex.: Ana ou AG-0007" autocomplete="off">
+<label class="so-leitor" for="f-fun">Função do agente</label>
+<select id="f-fun"><option value="">Todas as funções</option></select>
+<label class="so-leitor" for="f-asit">Situação do agente</label>
+<select id="f-asit"><option value="">Todas as situações</option></select>
+<div class="cont" id="cont-ag"></div>
+<div id="lista-ag" aria-label="Lista de agentes"></div>
+
+<h2>Legenda</h2><ul class="leg" id="leg"></ul>
+<details class="leg-det"><summary>Ícones por tipo</summary><ul class="leg tipos" id="leg-tipos"></ul></details>
+<h2>Alertas</h2><div id="alertas" aria-label="Lista de alertas"></div>
+
+<h2>Demonstração de telemetria</h2>
+<p class="cont" style="margin-top:0">Os equipamentos enviam sinal sozinhos (simulado). Use os botões para ver o alerta de “sem sinal”.</p>
+<button type="button" class="btn-aside" id="b-silenciar">📵 Simular equipamento sem sinal</button>
+<button type="button" class="btn-aside" id="b-normalizar">📶 Normalizar todos os sinais</button>
+<div class="cont" id="msg-demo" role="status"></div>
+
+<h2>Atualização</h2>
+<label><input type="checkbox" id="auto" checked>Atualizar a cada 15 s (pausa enquanto você usa os controles)</label>
+</aside>
+
+<main id="conteudo" tabindex="-1">
+  <div class="tabs" role="tablist" id="tabs" aria-label="Seções">
+    <button id="t-mapa" role="tab" aria-selected="true" aria-controls="painel-mapa" tabindex="0">🗺️ Operação</button>
+    <button id="t-reg" role="tab" aria-selected="false" aria-controls="reg" tabindex="-1">🏙️ Regiões</button>
+    <button id="t-prev" role="tab" aria-selected="false" aria-controls="prev" tabindex="-1">🔮 Previsões</button>
+    <button id="t-cad" role="tab" aria-selected="false" aria-controls="cad" tabindex="-1">➕ Cadastro</button>
+  </div>
+  <section id="painel-mapa" role="tabpanel" aria-labelledby="t-mapa">
+    <div id="dica-ponto" class="dica-ponto" role="status" hidden>Clique no mapa para escolher a posição. Esc cancela.</div>
+    <div id="mapa" role="region" aria-label="Mapa de equipamentos e agentes. A lista abaixo do mapa traz as mesmas informações em texto."></div>
+    <details id="detalhe-eq"><summary>Lista de equipamentos (alternativa em texto ao mapa)</summary><div class="rolagem" id="lista-eq"></div></details>
+  </section>
+  <section id="reg" role="tabpanel" aria-labelledby="t-reg" hidden></section>
+  <section id="prev" role="tabpanel" aria-labelledby="t-prev" hidden></section>
+
+  <section id="cad" role="tabpanel" aria-labelledby="t-cad" hidden>
+    <div class="cab"><div><h2 class="tit">➕ Cadastro</h2>
+      <p>Cadastre equipamentos e agentes. Campos com <span class="obrig">*</span> são obrigatórios. Os campos de “Características” mudam conforme o tipo.</p></div></div>
+
+    <div class="card"><h3>Novo equipamento</h3>
+      <form id="f-eq">
+        <fieldset><legend>Identificação</legend><div class="form-grid">
+          <div><label for="c-tipo">Tipo de equipamento <span class="obrig">*</span></label><select id="c-tipo" required><option value="">Selecione…</option></select></div>
+          <div><label for="c-serie">Número de série <span class="obrig">*</span></label><input type="text" id="c-serie" required autocomplete="off"></div>
+          <div><label for="c-marca">Marca <span class="obrig">*</span></label><input type="text" id="c-marca" required autocomplete="off"></div>
+          <div><label for="c-modelo">Modelo <span class="obrig">*</span></label><input type="text" id="c-modelo" required autocomplete="off"></div>
+          <div><label for="c-orgao">Órgão responsável</label><input type="text" id="c-orgao" list="dl-orgao" autocomplete="off"></div>
+        </div></fieldset>
+        <fieldset><legend>Características do tipo escolhido</legend>
+          <p class="sub" id="c-attrs-dica">Escolha o tipo de equipamento para ver os campos próprios dele.</p>
+          <div class="form-grid" id="c-attrs"></div></fieldset>
+        <fieldset><legend>Localização</legend><div class="form-grid">
+          <div><label for="c-cep">CEP <span class="dica">8 dígitos</span></label><input type="text" id="c-cep" inputmode="numeric" autocomplete="off"></div>
+          <div><label for="c-rua">Nome da rua <span class="obrig">*</span></label><input type="text" id="c-rua" required autocomplete="off"></div>
+          <div><label for="c-ref">Referência <span class="dica">Ex.: número 181, KM 203, S/N, em frente ao Mercado do Tio</span></label><input type="text" id="c-ref" autocomplete="off"></div>
+          <div><label for="c-bairro">Bairro <span class="obrig">*</span></label><input type="text" id="c-bairro" required list="dl-bairro" autocomplete="off"></div>
+          <div><label for="c-cidade">Cidade/UF <span class="obrig">*</span> <span class="dica">Formato Cidade/UF</span></label><input type="text" id="c-cidade" required autocomplete="off"></div>
+          <div><label for="c-lat">Latitude <span class="obrig">*</span></label><input type="text" id="c-lat" required inputmode="decimal" autocomplete="off"></div>
+          <div><label for="c-lon">Longitude <span class="obrig">*</span></label><input type="text" id="c-lon" required inputmode="decimal" autocomplete="off"></div>
+        </div>
+        <button type="button" class="btn sec" id="b-eq-centro">Usar o centro do mapa</button>
+        <button type="button" class="btn sec" id="b-eq-clique">Escolher clicando no mapa</button></fieldset>
+        <fieldset><legend>Situação e manutenção</legend><div class="form-grid">
+          <div><label for="c-sit">Situação atual <span class="obrig">*</span></label><select id="c-sit" required></select></div>
+          <div><label for="c-manut">Necessidade de manutenção</label><select id="c-manut"><option value="">Automática (conforme a situação)</option></select></div>
+          <div><label for="c-prox">Data da próxima manutenção <span class="dica">Obrigatória se agendada</span></label><input type="date" id="c-prox"></div>
+          <div><label for="c-ult">Data da última manutenção</label><input type="date" id="c-ult"></div>
+          <div><label for="c-inst">Data de instalação</label><input type="date" id="c-inst"></div>
+        </div></fieldset>
+        <div id="c-eq-erros" class="erro-form" role="alert" tabindex="-1" hidden></div>
+        <div id="c-eq-ok" class="msg" role="status" tabindex="-1" hidden></div>
+        <button type="submit" class="btn">Cadastrar equipamento</button>
+      </form>
+    </div>
+
+    <div class="card"><h3>Novo agente</h3>
+      <form id="f-ag">
+        <div class="form-grid">
+          <div><label for="a-nome">Nome <span class="obrig">*</span></label><input type="text" id="a-nome" required autocomplete="off"></div>
+          <div><label for="a-mat">Matrícula <span class="obrig">*</span></label><input type="text" id="a-mat" required autocomplete="off"></div>
+          <div><label for="a-fun">Função <span class="obrig">*</span></label><select id="a-fun" required><option value="">Selecione…</option></select></div>
+          <div><label for="a-orgao">Órgão</label><input type="text" id="a-orgao" list="dl-orgao" autocomplete="off"></div>
+          <div><label for="a-sit">Situação <span class="obrig">*</span></label><select id="a-sit" required></select></div>
+          <div><label for="a-serie">Equipamento vinculado (nº de série) <span class="dica">Opcional. Ex.: a viatura ou moto do agente</span></label><input type="text" id="a-serie" list="dl-serie" autocomplete="off"></div>
+          <div><label for="a-lat">Latitude <span class="dica">Opcional (posição atual)</span></label><input type="text" id="a-lat" inputmode="decimal" autocomplete="off"></div>
+          <div><label for="a-lon">Longitude <span class="dica">Opcional (informe junto com a latitude)</span></label><input type="text" id="a-lon" inputmode="decimal" autocomplete="off"></div>
+        </div>
+        <button type="button" class="btn sec" id="b-ag-centro">Usar o centro do mapa</button>
+        <button type="button" class="btn sec" id="b-ag-clique">Escolher clicando no mapa</button>
+        <div id="c-ag-erros" class="erro-form" role="alert" tabindex="-1" hidden></div>
+        <div id="c-ag-ok" class="msg" role="status" tabindex="-1" hidden></div>
+        <div><button type="submit" class="btn">Cadastrar agente</button></div>
+      </form>
+    </div>
+
+    <div class="card"><h3>Atualizar a situação de um equipamento</h3>
+      <form id="f-up">
+        <div class="form-grid">
+          <div><label for="u-serie">Número de série <span class="obrig">*</span></label><input type="text" id="u-serie" required list="dl-serie" autocomplete="off"></div>
+          <div><label for="u-sit">Nova situação <span class="obrig">*</span></label><select id="u-sit" required><option value="">Selecione…</option></select></div>
+        </div>
+        <div id="c-up-erros" class="erro-form" role="alert" tabindex="-1" hidden></div>
+        <div id="c-up-ok" class="msg" role="status" tabindex="-1" hidden></div>
+        <button type="submit" class="btn">Atualizar situação</button>
+      </form>
+    </div>
+    <datalist id="dl-orgao"></datalist><datalist id="dl-bairro"></datalist><datalist id="dl-serie"></datalist>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+const COR={operacional:'#16a34a',mau_funcionamento:'#dc2626',em_manutencao:'#f59e0b',desativado:'#6b7280',furtado:'#7c3aed',nao_instalado:'#38bdf8'};
+const NIV_COR={critico:'#dc2626',alto:'#f97316',medio:'#eab308',baixo:'#16a34a'};   // só para marcadores (gráfico); o texto usa as classes .chip
+const NIV_TXT={critico:'Crítico',alto:'Alto',medio:'Médio',baixo:'Baixo'};
+const ST_TXT={critico:'Crítica',atencao:'Atenção',normal:'Normal'};
+// Ícone de cada TIPO de equipamento (o enunciado pede identificação diferente por tipo) e sigla da função do agente
+const ICONE={radar_velocidade:'📡',radar_semaforo:'🚦',radar_conversao:'↩️',camera:'📹',balanca:'⚖️',veiculo_autonomo:'🤖',
+  cancela:'🚧',veiculo_transporte:'🚕',totem_estacionamento:'🅿️',patinete:'🛴',moto_agente:'🏍️',viatura:'🚓'};
+const SIGLA={agente_transito:'AT',guarda_municipal:'GM',policial_militar:'PM'};
+const ABAS={mapa:['t-mapa','painel-mapa'],reg:['t-reg','reg'],prev:['t-prev','prev'],cad:['t-cad','cad']};
+const ALPHA_MAX=0.88;   // intensidade máxima do mapa de calor; texto escuro sempre (verificado no teste de contraste)
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const norm=s=>String(s??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+const fmt=(v,d=1)=>Number(v).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const REDUZ=!!(typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches);
+const map=L.map('mapa',{zoomControl:false,zoomAnimation:!REDUZ,fadeAnimation:!REDUZ,markerZoomAnimation:!REDUZ}).setView([-21.8,-47.6],13);
+L.control.zoom({zoomInTitle:'Aproximar o mapa',zoomOutTitle:'Afastar o mapa'}).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
+const camada=L.layerGroup().addTo(map);
+let meta,eqs=[],ags=[],marcadores={},agM={},primeira=true,prev=null,reg=null,tele=null,semSinal={},riscoId={},
+    heatSel='Cidade toda',aba_atual='mapa',msg='',ultimoAnuncio='',escolhendo=null,cadMontado=false;
+
+function opcoes(sel,pares){const v=sel.value;sel.length=1;pares.forEach(([k,t])=>sel.add(new Option(t,k)));sel.value=v}
+function anunciar(t,forcar){if(!forcar&&t===ultimoAnuncio)return;ultimoAnuncio=t;$('anuncio').textContent=t}
+function ir(m,z=16){const p=m.getLatLng();REDUZ?map.setView(p,z):map.flyTo(p,z);m.openPopup()}
+async function tentar(url){try{const r=await fetch(url);return r.ok?await r.json():null}catch(_){return null}}
+
+async function carregar(){
+  try{
+    const [m,e,a]=await Promise.all(['/api/tipos','/api/equipamentos?limite=2000','/api/agentes'].map(u=>fetch(u).then(r=>r.json())));
+    meta=m;eqs=e.itens;ags=a.itens;
+    [prev,reg,tele]=await Promise.all([tentar('/api/previsoes'),tentar('/api/regioes'),tentar('/api/telemetria/resumo')]);
+    riscoId={};(prev?prev.equipamentos:[]).forEach(x=>riscoId[x.id]=x);
+    semSinal={};(tele?tele.itens:[]).forEach(x=>semSinal[x.id]=x);
+    opcoes($('f-tipo'),Object.entries(meta.tipos).map(([k,v])=>[k,v.rotulo]));
+    opcoes($('f-sit'),Object.entries(meta.situacoes));
+    opcoes($('f-bairro'),[...new Set(eqs.map(x=>x.bairro))].sort().map(b=>[b,b]));
+    opcoes($('f-orgao'),[...new Set([...eqs.map(x=>x.orgao),...ags.map(x=>x.orgao)].filter(Boolean))].sort().map(b=>[b,b]));
+    opcoes($('f-fun'),Object.entries(meta.funcoes_agente));
+    opcoes($('f-asit'),Object.entries(meta.situacoes_agente));
+    legendaTipos();
+    if(!cadMontado)montarCad();
+    listasCad();
+    desenhar();
+    if(aba_atual==='prev')renderPrev();
+    if(aba_atual==='reg')renderReg();
+  }catch(err){$('kpis').innerHTML='<div class="kpi" role="alert">Não consegui falar com a API. O servidor está rodando?</div>'}
+}
+
+function legenda(){
+  const r=$('cor-risco').checked&&prev;
+  $('leg').innerHTML=(r?Object.keys(NIV_TXT).map(k=>`<li><i style="background:${NIV_COR[k]}"></i>Risco ${NIV_TXT[k].toLowerCase()}</li>`).join('')+'<li><i style="background:#94a3b8"></i>Sem previsão</li>'
+    :Object.entries(meta.situacoes).map(([k,t])=>`<li><i style="background:${COR[k]}"></i>${esc(t)}</li>`).join(''))
+    +'<li><i class="trac"></i>Contorno tracejado: fora de operação</li>'
+    +'<li><i class="anel-m"></i>Anel laranja tracejado: manutenção imediata, vencida ou em até 7 dias</li>'
+    +'<li><i class="anel-s"></i>Anel vermelho pontilhado: sem sinal</li>';
+}
+function legendaTipos(){
+  $('leg-tipos').innerHTML=Object.entries(meta.tipos).map(([k,v])=>`<li><span aria-hidden="true">${ICONE[k]||'❓'}</span>${esc(v.rotulo)}</li>`).join('')
+    +Object.entries(meta.funcoes_agente).map(([k,t])=>`<li><span class="ag" style="display:inline-block;width:24px;height:24px;line-height:20px;font-size:0.8125rem" aria-hidden="true">${SIGLA[k]||'?'}</span> ${esc(t)} (agente)</li>`).join('');
+}
+
+function dias(d){return d?Math.round((new Date(d)-new Date(new Date().toDateString()))/864e5):null}
+function precisaManut(x){return x.manutencao_tipo==='imediata'||(x.manutencao_tipo==='agendada'&&dias(x.proxima_manutencao)!=null&&dias(x.proxima_manutencao)<=7)}
+function valorAttr(v){return v===true?'Sim':v===false?'Não':String(v).replace(/_/g,' ')}
+
+function desenhar(){
+  if(!meta)return;
+  legenda();
+  const q=norm($('busca').value),qa=norm($('busca-ag').value);
+  const bate=(...c)=>!q||c.some(v=>norm(v).includes(q));
+  const f={tipo:$('f-tipo').value,situacao:$('f-sit').value,bairro:$('f-bairro').value,orgao:$('f-orgao').value};
+  const lista=eqs.filter(x=>(!f.tipo||x.tipo===f.tipo)&&(!f.situacao||x.situacao===f.situacao)&&(!f.bairro||x.bairro===f.bairro)&&(!f.orgao||x.orgao===f.orgao)&&bate(x.numero_serie,x.marca,x.modelo,x.rua,x.bairro));
+  camada.clearLayers();marcadores={};agM={};
+  const porRisco=$('cor-risco').checked&&prev;
+
+  if($('v-eq').checked) lista.forEach(x=>{
+    const defs=Object.fromEntries((meta.tipos[x.tipo]?meta.tipos[x.tipo].campos:[]).map(c=>[c.nome,c.rotulo]));
+    const attrs=Object.entries(x.atributos).map(([k,v])=>`${esc(defs[k]||k)}: ${esc(valorAttr(v))}`).join('<br>');
+    const rk=riscoId[x.id],sem=semSinal[x.id],rot=meta.tipos[x.tipo]?meta.tipos[x.tipo].rotulo:x.tipo;
+    const cor=porRisco?(rk?NIV_COR[rk.nivel]:'#94a3b8'):COR[x.situacao];
+    const linhaRisco=rk?`<br><b>Risco previsto: ${fmt(rk.risco)} (${NIV_TXT[rk.nivel]})</b><br><small>${rk.motivos.map(esc).join('<br>')}</small>`:'';
+    const linhaSinal=sem?`<br><b>⚠ Equipamento ${esc(sem.texto)}</b>`:'';
+    const pos=[x.latitude,x.longitude];
+    marcadores[x.id]=L.marker(pos,{keyboard:false,title:`${rot} ${x.numero_serie} – ${meta.situacoes[x.situacao]}`,
+      icon:L.divIcon({className:'',html:`<div class="pino${x.situacao==='operacional'?'':' fora'}" style="--st:${cor}"><span aria-hidden="true">${ICONE[x.tipo]||'❓'}</span></div>`,iconSize:[30,30],iconAnchor:[15,15],popupAnchor:[0,-16]})})
+      .bindPopup(`<b>${esc(rot)}</b><br>${esc(x.marca)} ${esc(x.modelo)} · ${esc(x.numero_serie)}<br>
+      <b>${esc(meta.situacoes[x.situacao])}</b> · manutenção: ${esc(meta.manutencoes[x.manutencao_tipo])}${x.proxima_manutencao?' ('+esc(x.proxima_manutencao)+')':''}${linhaSinal}<br>
+      ${esc(x.rua)}, ${esc(x.referencia)} – ${esc(x.bairro)}${x.orgao?'<br>Órgão: '+esc(x.orgao):''}<br>${attrs}${linhaRisco}`).addTo(camada);
+    // Destaques que não dependem só de cor: forma do anel (tracejado = manutenção, pontilhado = sem sinal)
+    if(precisaManut(x))L.circleMarker(pos,{radius:21,color:'#c2410c',weight:3,dashArray:'5 4',fill:false,interactive:false}).addTo(camada);
+    if(sem)L.circleMarker(pos,{radius:26,color:'#b91c1c',weight:3,dashArray:'1 6',lineCap:'round',fill:false,interactive:false}).addTo(camada);
+  });
+
+  const agl=ags.filter(a=>(!$('f-fun').value||a.funcao===$('f-fun').value)&&(!$('f-asit').value||a.situacao===$('f-asit').value)&&(!f.orgao||a.orgao===f.orgao)
+    &&bate(a.nome,a.matricula)&&(!qa||norm(a.nome).includes(qa)||norm(a.matricula).includes(qa)));
+  if($('v-ag').checked) agl.forEach(a=>{
+    if(a.latitude==null)return;
+    agM[a.id]=L.marker([a.latitude,a.longitude],{keyboard:false,title:`${a.nome} (${a.matricula})`,alt:`Agente ${a.nome}, matrícula ${a.matricula}`,
+      icon:L.divIcon({className:'',html:`<div class="ag" aria-hidden="true">${SIGLA[a.funcao]||'AG'}</div>`,iconSize:[28,28],iconAnchor:[14,14],popupAnchor:[0,-14]})})
+      .bindPopup(`<b>${esc(a.nome)}</b><br>${esc(meta.funcoes_agente[a.funcao])} · matrícula ${esc(a.matricula)}<br>${esc(a.orgao)} · ${esc(meta.situacoes_agente[a.situacao])}`).addTo(camada);
+  });
+  $('cont-ag').textContent=`${agl.length} de ${ags.length} agente(s)`;
+  $('lista-ag').innerHTML=agl.slice(0,60).map(a=>`<button type="button" class="item" data-ag="${a.id}"><b>${esc(a.nome)}</b> · ${esc(a.matricula)}<br>${esc(meta.funcoes_agente[a.funcao])} – ${esc(meta.situacoes_agente[a.situacao])}${a.latitude==null?' (sem posição no mapa)':''}</button>`).join('')
+    +(agl.length>60?`<div class="cont">… e mais ${agl.length-60}. Refine a busca.</div>`:'')||'<div class="cont">Nenhum agente encontrado.</div>';
+
+  const op=lista.filter(x=>x.situacao==='operacional').length,inst=lista.filter(x=>x.situacao!=='nao_instalado').length;
+  const indis=lista.filter(x=>['mau_funcionamento','em_manutencao','desativado','furtado'].includes(x.situacao)).length;
+  const nSem=lista.filter(x=>semSinal[x.id]).length;
+  $('kpis').innerHTML=[['Equipamentos',lista.length],['Operacionais',op],['Indisponíveis',indis],
+    ['Disponibilidade',inst?fmt(100*op/inst)+'%':'–'],['Sem sinal',tele?nSem:'–'],['Agentes ativos',ags.filter(a=>a.situacao==='em_atividade').length]]
+    .map(([t,v])=>`<div class="kpi">${t}<b>${v}</b></div>`).join('');
+  anunciar(`Mostrando ${lista.length} equipamento(s) e ${agl.length} agente(s).`);
+
+  $('lista-eq').innerHTML=`<div class="rolagem-x"><table><caption class="so-leitor">Equipamentos exibidos</caption><thead><tr><th scope="col" class="l">Equipamento</th><th scope="col" class="l">Tipo</th><th scope="col" class="l">Situação</th><th scope="col" class="l">Bairro</th><th scope="col" class="l">Sinal</th><th scope="col">Risco previsto</th></tr></thead><tbody>`
+    +lista.slice(0,100).map(x=>{const rk=riscoId[x.id],sem=semSinal[x.id];return `<tr><td class="l"><button type="button" class="link" data-foco="${x.id}">${esc(x.numero_serie)}</button></td><td class="l">${esc(meta.tipos[x.tipo].rotulo)}</td><td class="l">${esc(meta.situacoes[x.situacao])}</td><td class="l">${esc(x.bairro)}</td><td class="l">${sem?esc(sem.texto):(tele?'OK':'–')}</td><td>${rk?`${NIV_TXT[rk.nivel]} (${fmt(rk.risco)})`:'–'}</td></tr>`}).join('')
+    +`</tbody></table></div>`+(lista.length>100?`<p class="cont" style="color:var(--muted)">Mostrando 100 de ${lista.length}. Use a busca ou os filtros para refinar.</p>`:'');
+
+  const crit=lista.filter(x=>x.manutencao_tipo==='imediata').map(x=>({x,c:1,t:'Manutenção imediata'}));
+  const prox=lista.filter(x=>x.manutencao_tipo==='agendada'&&dias(x.proxima_manutencao)!=null&&dias(x.proxima_manutencao)<=7)
+    .map(x=>({x,c:0,t:dias(x.proxima_manutencao)<0?`Manutenção vencida há ${-dias(x.proxima_manutencao)} d`:`Manutenção em ${dias(x.proxima_manutencao)} d`}));
+  const anom=(prev?prev.anomalias:[]).map(a=>({x:eqs.find(e=>e.id===a.id),c:1,t:'Comportamento fora do padrão'})).filter(a=>a.x&&lista.includes(a.x));
+  const mudos=lista.filter(x=>semSinal[x.id]).map(x=>({x,c:1,t:'Equipamento '+semSinal[x.id].texto}));
+  const al=[...anom,...mudos,...crit,...prox];
+  $('alertas').innerHTML=al.slice(0,40).map(({x,c,t})=>`<button type="button" class="alerta ${c?'crit':''}" data-id="${x.id}"><b>${c?'⚠ ':''}${esc(t)}</b><br>${esc(meta.tipos[x.tipo].rotulo)} – ${esc(x.bairro)}</button>`).join('')
+    +(al.length>40?`<div class="cont">… e mais ${al.length-40}</div>`:'')||'<div class="cont">Sem alertas.</div>';
+
+  if(primeira&&lista.length){map.fitBounds(L.latLngBounds(lista.map(x=>[x.latitude,x.longitude])).pad(.1));primeira=false}
+}
+
+function aba(nome,foco){
+  aba_atual=nome;
+  Object.entries(ABAS).forEach(([k,[t,p]])=>{
+    const on=k===nome;$(p).hidden=!on;
+    $(t).setAttribute('aria-selected',String(on));$(t).setAttribute('tabindex',on?'0':'-1');
+  });
+  if(nome==='mapa')setTimeout(()=>map.invalidateSize(),50);
+  else if(nome==='prev')renderPrev();
+  else if(nome==='reg')renderReg();
+  if(foco)$(ABAS[nome][0]).focus();
+}
+
+function focar(id){
+  aba('mapa');const m=marcadores[id];
+  if(m){setTimeout(()=>ir(m,17),60);const e=eqs.find(x=>x.id===id);if(e)anunciar(`Mostrando no mapa: ${e.numero_serie}, ${e.bairro}.`,true)}
+}
+function limparFiltros(){
+  ['busca','busca-ag'].forEach(i=>$(i).value='');['f-tipo','f-sit','f-bairro','f-orgao','f-fun','f-asit'].forEach(i=>$(i).value='');
+  $('v-eq').checked=true;
+}
+function irPara(id){limparFiltros();aba('mapa');desenhar();focar(id)}
+function verRegiao(b){
+  limparFiltros();$('f-bairro').value=b;aba('mapa');desenhar();
+  const pts=Object.values(marcadores).map(m=>m.getLatLng());
+  if(pts.length)map.fitBounds(L.latLngBounds(pts).pad(.2),{maxZoom:16,animate:!REDUZ});
+  anunciar(`Mostrando a região ${b} no mapa.`,true);
+}
+
+function chip(n){return `<span class="chip ${n}">${NIV_TXT[n]}</span>`}
+function dm(iso){const [,m,d]=iso.split('-');return `${d}/${m}`}
+function cel(v,max){const a=max?Math.min(1,v/max):0;return `background:rgba(249,115,22,${(0.08+(ALPHA_MAX-0.08)*a).toFixed(2)});color:var(--fg)`}
+function envolverTabelas(h){return h.replace(/<table>/g,'<div class="rolagem-x"><table>').replace(/<\/table>/g,'</table></div>')}
+// Tabela mais larga que a tela: a rolagem fica dentro dela e é alcançável pelo teclado (só quando realmente rola)
+function rolagemFocavel(raiz){
+  raiz.querySelectorAll('.rolagem-x').forEach(d=>{
+    if(d.scrollWidth>d.clientWidth+1){d.tabIndex=0;d.setAttribute('role','region');d.setAttribute('aria-label','Tabela com rolagem horizontal')}
+  });
+}
+
+/* ------------------------------------------------------------- Regiões */
+function renderReg(){
+  const el=$('reg');
+  if(!reg){el.innerHTML='<div class="card" role="alert">Visão por região indisponível. Confira se o servidor está rodando e atualizado.</div>';return}
+  const r=reg.resumo;
+  let h=`<div class="cab"><div><h2 class="tit">🏙️ Regiões da cidade</h2>
+    <p>Quais regiões operam normalmente e quais exigem atenção agora · atualizado às ${esc(reg.gerado_em.slice(11,16))}</p></div></div>`;
+  h+=`<div class="stats" style="margin-bottom:14px">${['critico','atencao','normal'].map(k=>`<div class="stat ${k}"><b>${r[k]}</b><span>região(ões) ${k==='critico'?'crítica(s)':k==='atencao'?'em atenção':'operando normalmente'}</span></div>`).join('')}</div>`;
+  h+=`<div class="card"><h3>Situação por região</h3><div class="sub">Da mais grave para a menos grave. Regras: ${esc(reg.regras.texto)}</div>
+    <table><caption class="so-leitor">Situação operacional por região</caption><tr><th scope="col" class="l">Região</th><th scope="col">Situação</th><th scope="col">Disponibilidade</th><th scope="col">Operacionais / instalados</th><th scope="col">Manutenção imediata</th><th scope="col">Sem sinal</th><th scope="col">Agentes ativos</th><th scope="col" class="l">Por quê</th><th scope="col">Mapa</th></tr>
+    ${reg.regioes.map(b=>`<tr><th scope="row" class="l">${esc(b.bairro)}</th><td><span class="chip ${b.status}">${ST_TXT[b.status]}</span></td>
+      <td>${b.disponibilidade==null?'–':`<span class="mini" aria-hidden="true"><i style="width:${Math.round(100*b.disponibilidade)}%"></i></span>${fmt(100*b.disponibilidade)}%`}</td>
+      <td>${b.operacionais} / ${b.instalados}</td><td>${b.manutencao_imediata}</td><td>${b.sem_sinal}</td><td>${b.agentes_ativos}</td>
+      <td class="l">${b.motivos.map(esc).join('; ')}</td><td><button type="button" class="link" data-reg="${esc(b.bairro)}">Ver no mapa<span class="so-leitor"> ${esc(b.bairro)}</span></button></td></tr>`).join('')}</table></div>`;
+  const itens=tele?tele.itens:[];
+  h+=`<div class="card"><h3>Equipamentos sem sinal</h3><div class="sub">“Se algo estiver acontecendo, PROMETHEUS percebe?” Equipamento que para de enviar telemetria não avisa que quebrou; por isso o silêncio é um alerta. Limite: ${tele?tele.limite_min:15} minutos sem leitura. Monitorados: ${tele?tele.monitorados:'–'} · com sinal: ${tele?tele.com_sinal:'–'}.</div>
+    ${itens.length?`<table><caption class="so-leitor">Equipamentos sem sinal</caption><tr><th scope="col" class="l">Equipamento</th><th scope="col" class="l">Tipo</th><th scope="col" class="l">Bairro</th><th scope="col" class="l">Situação do sinal</th></tr>
+    ${itens.map(i=>`<tr><td class="l"><button type="button" class="link" data-eq="${i.id}">${esc(i.numero_serie)}</button></td><td class="l">${esc(meta.tipos[i.tipo]?meta.tipos[i.tipo].rotulo:i.tipo)}</td><td class="l">${esc(i.bairro)}</td><td class="l">${esc(i.texto)}</td></tr>`).join('')}</table>`
+      :'<p style="font-size:0.875rem">Todos os equipamentos monitorados estão enviando sinal. Use “Simular equipamento sem sinal” no painel lateral para ver o alerta.</p>'}</div>`;
+  el.innerHTML=envolverTabelas(h);
+  rolagemFocavel(el);
+}
+
+/* ------------------------------------------------------------ Previsões */
+function renderPrev(){
+  const el=$('prev');
+  if(!prev){el.innerHTML='<div class="card" role="alert">Previsões indisponíveis. Confira se o servidor está rodando e atualizado.</div>';return}
+  const p=prev,r=p.resumo;
+  let h=`<div class="cab"><div><h2 class="tit">🔮 Cidade Preditiva</h2>
+    <p>O que pode acontecer amanhã, com base em ${r.ocorrencias_analisadas} eventos dos últimos ${r.janela_dias} dias · atualizado às ${esc(p.gerado_em.slice(11,16))}</p></div>
+    <div class="acoes"><button type="button" id="b-rajada">⚡ Simular rajada de falhas (demo)</button><button type="button" id="b-limpa" class="sec">Limpar demo</button></div></div>`;
+  h+=`<div class="msg" role="status" ${msg?'':'hidden'}>${esc(msg)}</div>`;
+
+  h+=`<div class="card brief"><h3>📡 Briefing do PROMETHEUS</h3><ul>${p.briefing.map(l=>`<li>${esc(l)}</li>`).join('')}</ul></div>`;
+
+  const lv=r.por_nivel;
+  h+=`<div class="stats" style="margin-bottom:14px">${['critico','alto','medio','baixo'].map(k=>`<div class="stat ${k}"><b>${lv[k]}</b><span>equipamentos com risco ${NIV_TXT[k].toLowerCase()}</span></div>`).join('')}</div>`;
+
+  h+=`<div class="grid2" style="margin-bottom:14px"><div class="card"><h3>Risco por bairro</h3><div class="sub">Índice 0–100 relativo ao bairro mais crítico (ocorrências por equipamento, ponderadas pela gravidade). Tendência: últimos 30 dias contra os 30 anteriores.</div>
+    ${p.bairros.map(b=>{const t=b.tendencia_pct;const tx=t==null?'sem base':`<span class="${t>0?'alta':'queda'}">${t>0?'▲ alta':'▼ queda'} de ${Math.abs(t)}%</span>`;
+      return `<div class="barra"><b>${esc(b.bairro)}</b><div class="t" role="img" aria-label="Índice ${fmt(b.indice)} de 100, nível ${NIV_TXT[b.nivel]}"><i style="width:${b.indice}%;background:${NIV_COR[b.nivel]}"></i></div><span>${fmt(b.indice)} (${NIV_TXT[b.nivel]}) · ${tx}<br>👤 ${b.agentes_ativos} ativo(s)</span></div>`}).join('')}</div>`;
+
+  const pd=p.proximos_dias;let max=0;Object.values(pd.bairros).forEach(v=>v.forEach(x=>max=Math.max(max,x)));
+  h+=`<div class="card"><h3>Próximos 7 dias</h3><div class="sub">Nº esperado de eventos (ocorrências e alertas) por bairro. Ritmo do bairro × padrão do dia da semana.</div>
+    <table><caption class="so-leitor">Eventos esperados por bairro nos próximos 7 dias</caption><tr><th scope="col" class="l">Bairro</th>${pd.datas.map((d,i)=>`<th scope="col">${esc(pd.dias[i].slice(0,3))}<br>${dm(d)}</th>`).join('')}<th scope="col">Total</th></tr>
+    ${p.bairros.map(b=>{const v=pd.bairros[b.bairro]||[];return `<tr><th scope="row" class="l">${esc(b.bairro)}</th>${v.map(x=>`<td style="${cel(x,max)}">${fmt(x,2)}</td>`).join('')}<td><b>${fmt(v.reduce((a,x)=>a+x,0))}</b></td></tr>`}).join('')}</table></div></div>`;
+
+  const nomes=['Cidade toda',...p.bairros.map(b=>b.bairro)];if(!nomes.includes(heatSel))heatSel='Cidade toda';
+  const mat=p.mapa_calor[heatSel]||[];let mx=0;mat.forEach(l=>l.forEach(v=>mx=Math.max(mx,v)));
+  h+=`<div class="card"><h3>Mapa de calor: quando as ocorrências acontecem</h3><div class="sub">Gravidade acumulada nos últimos ${r.janela_dias} dias por dia da semana e faixa de 4 h (furto = ${p.pesos_evento.furto}, vandalismo = ${p.pesos_evento.vandalismo}, falha = ${p.pesos_evento.falha}, alerta = ${p.pesos_evento.alerta}). Os valores aparecem escritos; a cor só reforça.</div>
+    <label for="heat-sel" class="so-leitor">Bairro do mapa de calor</label>
+    <select id="heat-sel">${nomes.map(n=>`<option ${n===heatSel?'selected':''}>${esc(n)}</option>`).join('')}</select>
+    <table><caption class="so-leitor">Gravidade das ocorrências por dia da semana e faixa de horário: ${esc(heatSel)}</caption><tr><th scope="col" class="l">Dia</th>${p.faixas.map(f=>`<th scope="col">${esc(f)}</th>`).join('')}</tr>
+    ${mat.map((lin,d)=>`<tr><th scope="row" class="l">${esc(p.dias_semana[d])}</th>${lin.map(v=>`<td style="${cel(v,mx)}">${v?fmt(v):'–'}</td>`).join('')}</tr>`).join('')}</table></div>`;
+
+  h+=`<div class="card"><h3>Recomendações de reforço</h3><div class="sub">Geradas automaticamente a partir do mapa de calor e dos agentes em atividade. São apoio à decisão, não ordens.</div>
+    ${p.recomendacoes.length?p.recomendacoes.map(x=>`<div class="rec">${chip(x.nivel)} ${esc(x.texto)}</div>`).join(''):'<p>Sem dados suficientes para recomendar.</p>'}</div>`;
+
+  h+=`<div class="card"><h3>Equipamentos com maior risco</h3><div class="sub">Risco 0–100 = tempo sem manutenção + ocorrências recentes + situação atual + histórico do bairro. Use o botão com o número de série para ver no mapa.</div>
+    <table><caption class="so-leitor">Equipamentos com maior risco previsto</caption><tr><th scope="col" class="l">Equipamento</th><th scope="col" class="l">Bairro</th><th scope="col">Risco</th><th scope="col" class="l">Por quê</th></tr>
+    ${p.equipamentos.slice(0,15).map(e=>`<tr class="clic" data-eq="${e.id}"><td class="l"><button type="button" class="link" data-eq="${e.id}">${esc(e.numero_serie)}</button><br><small>${esc(meta.tipos[e.tipo]?meta.tipos[e.tipo].rotulo:e.tipo)}</small></td><td class="l">${esc(e.bairro)}</td><td>${chip(e.nivel)}<br><b>${fmt(e.risco)}</b></td><td class="l">${e.motivos.map(esc).join('; ')}</td></tr>`).join('')}</table></div>`;
+
+  h+=`<div class="card"><h3>Comportamento fora do padrão</h3><div class="sub">Equipamentos com muito mais ocorrências nos últimos 14 dias do que o próprio histórico indicaria (teste de Poisson, p &lt; 0,02).</div>
+    ${p.anomalias.length?`<table><caption class="so-leitor">Equipamentos com comportamento fora do padrão</caption><tr><th scope="col" class="l">Equipamento</th><th scope="col" class="l">Bairro</th><th scope="col" class="l">O que houve</th></tr>${p.anomalias.map(a=>`<tr class="clic" data-eq="${a.id}"><td class="l"><button type="button" class="link" data-eq="${a.id}">${esc(a.numero_serie)}</button></td><td class="l">${esc(a.bairro)}</td><td class="l">${esc(a.texto)}</td></tr>`).join('')}</table>`
+      :'<p style="font-size:0.875rem">Nenhum equipamento fora do padrão agora. Use “Simular rajada de falhas” para ver a detecção em ação.</p>'}</div>`;
+
+  const v=p.validacao;
+  h+=`<div class="card"><h3>✅ Esta previsão funciona? (validação com dados passados)</h3>`;
+  if(!v.valido){h+=`<p>${esc(v.motivo||'Sem dados suficientes.')}</p></div>`}
+  else{
+    h+=`<div class="sub">Treinado só com dados até ${dm(v.data_corte)} e conferido nos ${v.dias_teste} dias seguintes (${v.eventos_teste} eventos que o método nunca viu).</div>
+    <div class="stats">
+      <div class="stat"><b>${Math.round(100*v.equipamentos.captura)}%</b><span>das ocorrências do mês seguinte estavam nos 20% de equipamentos apontados como mais arriscados (acaso: 20%) · ${fmt(v.equipamentos.lift)}× melhor</span></div>
+      <div class="stat"><b>${Math.round(100*v.equipamentos.precisao)}%</b><span>dos equipamentos apontados tiveram ocorrência (acaso: ${Math.round(100*v.equipamentos.precisao_acaso)}%)</span></div>
+      <div class="stat"><b>${v.bairros.acertos} de ${v.bairros.k}</b><span>bairros críticos acertados (acaso: ${fmt(v.bairros.acaso_esperado,2)})</span></div>
+      <div class="stat"><b>${v.bairros.spearman==null?'–':fmt(v.bairros.spearman,2)}</b><span>correlação entre o ranking previsto e o real dos bairros (1 = idêntico)</span></div>
+    </div><p class="aviso">${esc(v.aviso)}</p></div>`;
+  }
+
+  h+=`<div class="card met"><h3>Como o sistema pensa</h3>
+    <h4 style="margin:10px 0 2px;font-size:0.9rem">O que é previsto</h4><p>(1) quais equipamentos têm maior risco de falha, furto ou vandalismo; (2) quais bairros concentram ocorrências e se estão piorando; (3) em que dia e faixa de horário elas se concentram; (4) quantos eventos esperar por bairro nos próximos 7 dias; (5) equipamentos com comportamento fora do padrão.</p>
+    <h4 style="margin:10px 0 2px;font-size:0.9rem">Quais informações foram consideradas</h4><p>Cadastro dos equipamentos (situação, última e próxima manutenção, bairro) e histórico de eventos dos últimos ${r.janela_dias} dias (falha, furto, vandalismo e alerta, com gravidades diferentes). A posição dos agentes só é usada para contar quantos estão ativos perto de cada bairro e não é guardada fora de serviço.</p>
+    <h4 style="margin:10px 0 2px;font-size:0.9rem">Como ajuda na decisão</h4><p>Prioriza quais equipamentos mandar para manutenção primeiro, indica onde e em que horário reforçar agentes e avisa cedo quando algo foge do normal. O método é estatística simples e explicável: toda nota mostra seus motivos e a validação mostra o quanto ele acerta. As previsões são sobre equipamentos e bairros, não sobre pessoas, e não tomam decisões sozinhas.</p>
+    <h4 style="margin:10px 0 2px;font-size:0.9rem">Limitações</h4><p>Os dados do projeto são simulados. Com poucos eventos por bairro, as faixas de horário têm incerteza; por isso cada recomendação informa a base de ocorrências usada. O sistema aponta risco, não certeza, e um bairro com mais registros pode refletir mais fiscalização ali, não necessariamente mais problemas.</p></div>`;
+  el.innerHTML=envolverTabelas(h);
+  rolagemFocavel(el);
+}
+
+/* ------------------------------------------------------------- Cadastro */
+const val=id=>$(id).value.trim();
+const numero=id=>{const v=val(id).replace(',','.');const n=parseFloat(v);return v===''||isNaN(n)?null:n};
+const humano=s=>String(s).replace(/_/g,' ');
+
+function montarCad(){
+  cadMontado=true;
+  opcoes($('c-tipo'),Object.entries(meta.tipos).map(([k,v])=>[k,v.rotulo]));
+  const sit=Object.entries(meta.situacoes);
+  $('c-sit').innerHTML=sit.map(([k,t])=>`<option value="${esc(k)}"${k==='operacional'?' selected':''}>${esc(t)}</option>`).join('');
+  opcoes($('c-manut'),Object.entries(meta.manutencoes));
+  opcoes($('a-fun'),Object.entries(meta.funcoes_agente));
+  $('a-sit').innerHTML=Object.entries(meta.situacoes_agente).map(([k,t])=>`<option value="${esc(k)}"${k==='fora_de_servico'?' selected':''}>${esc(t)}</option>`).join('');
+  opcoes($('u-sit'),sit);
+  if(eqs.length)$('c-cidade').value=eqs[0].cidade_uf;
+  $('c-tipo').addEventListener('change',renderAttrs);
+}
+function listasCad(){
+  const dl=(id,vals)=>{$(id).innerHTML=[...new Set(vals.filter(Boolean))].sort().map(v=>`<option value="${esc(v)}"></option>`).join('')};
+  dl('dl-orgao',[...eqs.map(x=>x.orgao),...ags.map(x=>x.orgao)]);dl('dl-bairro',eqs.map(x=>x.bairro));dl('dl-serie',eqs.map(x=>x.numero_serie));
+}
+function renderAttrs(){
+  const t=meta.tipos[$('c-tipo').value];const box=$('c-attrs');
+  if(!t){box.innerHTML='';$('c-attrs-dica').hidden=false;return}
+  $('c-attrs-dica').hidden=true;
+  box.innerHTML=t.campos.map(c=>{
+    const id='at-'+c.nome,obr=c.obrigatorio?' <span class="obrig">*</span>':' <span class="dica">Opcional</span>',req=c.obrigatorio?' required':'';
+    let campo;
+    if(c.tipo==='booleano')campo=`<select id="${id}"${req}><option value="">Selecione…</option><option value="true">Sim</option><option value="false">Não</option></select>`;
+    else if(c.tipo==='opcao')campo=`<select id="${id}"${req}><option value="">Selecione…</option>${c.opcoes.map(o=>`<option value="${esc(o)}">${esc(humano(o))}</option>`).join('')}</select>`;
+    else if(c.tipo==='inteiro'||c.tipo==='numero')campo=`<input type="number" id="${id}" step="${c.tipo==='inteiro'?1:'any'}"${c.minimo!=null?` min="${c.minimo}"`:''}${c.maximo!=null?` max="${c.maximo}"`:''}${req}>`;
+    else campo=`<input type="text" id="${id}" autocomplete="off"${req}>`;
+    const faixa=(c.minimo!=null&&c.maximo!=null)?` <span class="dica">De ${c.minimo} a ${c.maximo}</span>`:'';
+    return `<div><label for="${id}">${esc(c.rotulo)}${obr}${faixa}</label>${campo}</div>`;
+  }).join('');
+}
+function coletarAttrs(){
+  const t=meta.tipos[$('c-tipo').value];const o={};if(!t)return o;
+  t.campos.forEach(c=>{
+    const e=$('at-'+c.nome);if(!e||e.value==='')return;
+    o[c.nome]=c.tipo==='booleano'?e.value==='true':c.tipo==='inteiro'?parseInt(e.value,10):c.tipo==='numero'?parseFloat(e.value):e.value.trim();
+  });
+  return o;
+}
+async function enviar(metodo,url,corpo){
+  try{
+    const r=await fetch(url,{method:metodo,headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)});
+    let j={};try{j=await r.json()}catch(_){}
+    return {ok:r.ok,status:r.status,j};
+  }catch(_){return {ok:false,status:0,j:{erro:'Falha de conexão com o servidor. Tente novamente.'}}}
+}
+function resultado(pref,r,textoOk,extra){
+  const ok=$(`c-${pref}-ok`),er=$(`c-${pref}-erros`);
+  if(r.ok){
+    er.hidden=true;ok.innerHTML=esc(textoOk)+(extra||'');ok.hidden=false;ok.focus();anunciar(textoOk,true);
+  }else{
+    ok.hidden=true;
+    const lista=r.j.erros||[r.j.erro||'Não foi possível concluir. Verifique os campos e tente de novo.'];
+    er.innerHTML='<strong>Corrija os pontos abaixo:</strong><ul>'+lista.map(t=>`<li>${esc(t)}</li>`).join('')+'</ul>';
+    er.hidden=false;er.focus();
+  }
+}
+function escolherPonto(lat,lon){
+  escolhendo={lat,lon};aba('mapa');$('dica-ponto').hidden=false;
+  anunciar('Clique no mapa para escolher a posição. Esc cancela.',true);
+}
+function pontoNoCentro(lat,lon){const c=map.getCenter();$(lat).value=c.lat.toFixed(6);$(lon).value=c.lng.toFixed(6);anunciar('Coordenadas preenchidas com o centro do mapa.',true)}
+function fimPonto(){escolhendo=null;$('dica-ponto').hidden=true}
+
+$('f-eq').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const d={tipo:val('c-tipo'),numero_serie:val('c-serie'),marca:val('c-marca'),modelo:val('c-modelo'),orgao:val('c-orgao'),
+    cep:val('c-cep'),rua:val('c-rua'),referencia:val('c-ref'),bairro:val('c-bairro'),cidade_uf:val('c-cidade'),
+    latitude:numero('c-lat'),longitude:numero('c-lon'),situacao:val('c-sit'),manutencao_tipo:val('c-manut'),
+    proxima_manutencao:val('c-prox'),ultima_manutencao:val('c-ult'),data_instalacao:val('c-inst'),atributos:coletarAttrs()};
+  const r=await enviar('POST','/api/equipamentos',d);
+  if(r.ok){
+    await carregar();
+    resultado('eq',r,`Equipamento ${r.j.numero_serie} cadastrado (código ${r.j.id}).`,` <button type="button" class="link" data-eq="${r.j.id}">Ver no mapa</button>`);
+    const cidade=val('c-cidade');$('f-eq').reset();$('c-cidade').value=cidade;renderAttrs();
+  }else resultado('eq',r);
+});
+$('f-ag').addEventListener('submit',async e=>{
+  e.preventDefault();
+  let vinc=null;
+  if(val('a-serie')){const alvo=eqs.find(x=>x.numero_serie===val('a-serie'));
+    if(!alvo){resultado('ag',{ok:false,j:{erros:['Equipamento vinculado: número de série não encontrado.']}});return}vinc=alvo.id}
+  const d={nome:val('a-nome'),matricula:val('a-mat'),funcao:val('a-fun'),orgao:val('a-orgao'),situacao:val('a-sit'),
+    latitude:numero('a-lat'),longitude:numero('a-lon'),equipamento_id:vinc};
+  const r=await enviar('POST','/api/agentes',d);
+  if(r.ok){await carregar();resultado('ag',r,`Agente ${r.j.nome} cadastrado (matrícula ${r.j.matricula}).`);$('f-ag').reset()}
+  else resultado('ag',r);
+});
+$('f-up').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const alvo=eqs.find(x=>x.numero_serie===val('u-serie'));
+  if(!alvo){resultado('up',{ok:false,j:{erros:['Número de série não encontrado. Escolha um da lista.']}});return}
+  const r=await enviar('PATCH','/api/equipamentos/'+alvo.id,{situacao:val('u-sit')});
+  if(r.ok){await carregar();resultado('up',r,`${r.j.numero_serie}: situação atualizada para “${meta.situacoes[r.j.situacao]}”.`,` <button type="button" class="link" data-eq="${r.j.id}">Ver no mapa</button>`);$('f-up').reset()}
+  else resultado('up',r);
+});
+$('b-eq-centro').addEventListener('click',()=>pontoNoCentro('c-lat','c-lon'));
+$('b-ag-centro').addEventListener('click',()=>pontoNoCentro('a-lat','a-lon'));
+$('b-eq-clique').addEventListener('click',()=>escolherPonto('c-lat','c-lon'));
+$('b-ag-clique').addEventListener('click',()=>escolherPonto('a-lat','a-lon'));
+map.on('click',e=>{
+  if(!escolhendo)return;const a=escolhendo;fimPonto();
+  $(a.lat).value=e.latlng.lat.toFixed(6);$(a.lon).value=e.latlng.lng.toFixed(6);
+  aba('cad');$(a.lat).focus();anunciar('Coordenadas preenchidas com o ponto clicado.',true);
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&escolhendo){fimPonto();aba('cad');anunciar('Escolha de posição cancelada.',true)}});
+$('cad').addEventListener('click',e=>{const d=e.target.closest('[data-eq]');if(d)irPara(+d.dataset.eq)});
+
+/* --------------------------------------------------------------- Eventos */
+['f-tipo','f-sit','f-bairro','f-orgao','f-fun','f-asit','v-eq','v-ag','cor-risco'].forEach(id=>$(id).addEventListener('change',desenhar));
+$('busca').addEventListener('input',()=>{
+  desenhar();
+  const pts=[...Object.values(marcadores),...Object.values(agM)].map(m=>m.getLatLng());
+  if($('busca').value.trim().length>=3&&pts.length)map.fitBounds(L.latLngBounds(pts).pad(.2),{maxZoom:16,animate:!REDUZ});
+});
+$('busca-ag').addEventListener('input',desenhar);
+$('busca-ag').addEventListener('keydown',e=>{
+  if(e.key!=='Enter')return;
+  aba('mapa');const m=Object.values(agM)[0];
+  if(m){ir(m);anunciar('Agente localizado no mapa.',true)}else anunciar('Nenhum agente com posição no mapa para essa busca.',true);
+});
+$('alertas').addEventListener('click',e=>{const d=e.target.closest('[data-id]');if(d)focar(+d.dataset.id)});
+$('lista-eq').addEventListener('click',e=>{const d=e.target.closest('[data-foco]');if(d)focar(+d.dataset.foco)});
+$('lista-ag').addEventListener('click',e=>{const d=e.target.closest('[data-ag]');if(!d)return;aba('mapa');const m=agM[d.dataset.ag];if(m){ir(m);anunciar('Agente localizado no mapa.',true)}});
+$('detalhe-eq').addEventListener('toggle',()=>setTimeout(()=>map.invalidateSize(),50));
+Object.entries(ABAS).forEach(([k,[t]])=>$(t).addEventListener('click',()=>aba(k)));
+$('tabs').addEventListener('keydown',e=>{
+  const ord=Object.keys(ABAS),i=ord.indexOf(aba_atual),n=ord.length;let j=null;
+  if(e.key==='ArrowRight')j=(i+1)%n;else if(e.key==='ArrowLeft')j=(i+n-1)%n;else if(e.key==='Home')j=0;else if(e.key==='End')j=n-1;
+  if(j!==null){e.preventDefault();aba(ord[j],true)}
+});
+$('reg').addEventListener('click',e=>{
+  const b=e.target.closest('[data-reg]');if(b){verRegiao(b.dataset.reg);return}
+  const q=e.target.closest('[data-eq]');if(q)irPara(+q.dataset.eq);
+});
+$('prev').addEventListener('click',async e=>{
+  const row=e.target.closest('[data-eq]');if(row){irPara(+row.dataset.eq);return}
+  if(e.target.id==='b-rajada'){
+    try{const r=await fetch('/api/demo/rajada',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(x=>x.json());
+      msg=r.numero_serie?`Rajada de ${r.eventos} falhas simulada em ${r.numero_serie} (${r.bairro}). Veja “Comportamento fora do padrão”.`:(r.erro||'Não foi possível simular.')}
+    catch(_){msg='Falha ao chamar a API.'}
+    await carregar();anunciar(msg,true);
+  }
+  if(e.target.id==='b-limpa'){
+    try{const r=await fetch('/api/demo/rajada',{method:'DELETE'}).then(x=>x.json());msg=`${r.removidos} evento(s) de demonstração removido(s).`}catch(_){msg='Falha ao chamar a API.'}
+    await carregar();anunciar(msg,true);
+  }
+});
+$('prev').addEventListener('change',e=>{if(e.target.id==='heat-sel'){heatSel=e.target.value;renderPrev();const s=$('heat-sel');if(s&&s.focus)s.focus()}});
+async function demoTele(acao){
+  const r=await enviar('POST','/api/demo/telemetria',{acao});
+  const t=r.ok?(acao==='silenciar'?`${r.j.numero_serie} (${r.j.bairro}) parou de enviar sinal. Veja o alerta e a aba Regiões.`:'Todos os equipamentos voltaram a enviar sinal.'):(r.j.erro||(r.j.erros||[]).join('; ')||'Não foi possível simular.');
+  $('msg-demo').textContent=t;await carregar();anunciar(t,true);
+}
+$('b-silenciar').addEventListener('click',()=>demoTele('silenciar'));
+$('b-normalizar').addEventListener('click',()=>demoTele('normalizar'));
+carregar();
+setInterval(()=>{
+  if(!$('auto').checked||document.querySelector('.leaflet-popup'))return;           // pausado pelo usuário ou lendo um detalhe
+  const a=document.activeElement;
+  if(a&&a!==document.body&&a.closest&&a.closest('aside,#prev,#reg,#cad,#detalhe-eq'))return;   // não tira o foco de quem está usando
+  carregar();
+},15000);
+</script></body></html>
