@@ -1,5 +1,8 @@
 # 🔥 F.O.G.O. – Ferramenta Onisciente de Gestão e Operações
 
+## Video Falando um pouco SOBRE 
+https://youtu.be/rD9UJTexm_A
+
 Projeto do **Desafio DSIN – Protocolo Prometeu (Etapa Bônus)**. O F.O.G.O. é uma central de operações para o trânsito e a segurança da cidade: cadastra equipamentos IoT e agentes, mostra em tempo real o que está acontecendo e prevê onde podem surgir problemas.
 
 > Os dados e a telemetria deste projeto são **simulados** (uma cidade fictícia gerada automaticamente).
