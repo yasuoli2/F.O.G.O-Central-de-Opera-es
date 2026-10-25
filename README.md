@@ -32,13 +32,6 @@ Projeto do **Desafio DSIN – Protocolo Prometeu (Etapa Bônus)**. O F.O.G.O. é
 ## 🚀 Como rodar
 
 Requisitos: **Python 3.10 ou superior** e internet (para carregar o mapa).
-
-**Windows:** dê dois cliques em `iniciar.bat`.
-
-**Linux/Mac:** execute `./iniciar.sh`.
-
-Ou, manualmente:
-
 ```bash
 python -m pip install -r requirements.txt
 python -m uvicorn app.main:app --reload
